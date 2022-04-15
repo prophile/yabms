@@ -1,17 +1,17 @@
 """Permute zones."""
 
-import sys
+import collections
 import random
 import statistics
-import collections
+import sys
+
 
 def permute_zones(schedule):
     """Permute the zones in a schedule for balance."""
-
     # Do a hard copy
     schedule = [list(x) for x in schedule]
     best_schedule = [list(x) for x in schedule]
-    best_score = float('inf')
+    best_score = float("inf")
 
     print("Balancing zones...", file=sys.stderr)
 
@@ -35,11 +35,9 @@ def permute_zones(schedule):
             best_score = score
 
         # Pick a random team/zone pair at the highest count
-        highest_team, highest_zone = random.choice([
-            k
-            for k, v in appearance_counts.items()
-            if v == highest_count
-        ])
+        highest_team, highest_zone = random.choice(
+            [k for k, v in appearance_counts.items() if v == highest_count]
+        )
 
         # Find a match with this team in this zone and permute it.
         random.shuffle(match_numbers)
@@ -47,9 +45,9 @@ def permute_zones(schedule):
             if schedule[match_number][highest_zone] == highest_team:
                 random.shuffle(schedule[match_number])
                 break
-        
+
         if n and n % 10_000 == 0:
-            #print(f"{n} iterations, {highest_count} to {lowest_count}, score={score:.3f}", file=sys.stderr)
+            # print(f"{n} iterations, {highest_count} to {lowest_count}, score={score:.3f}", file=sys.stderr)
             pass
-    
+
     return best_schedule

@@ -5,7 +5,7 @@ import sys
 
 import pkg_resources
 
-from . import coalesce, protoround, permute
+from . import coalesce, permute, protoround
 
 
 def get_version():
@@ -59,14 +59,14 @@ def main(args=sys.argv[1:]):
         num_zones=options.zones,
         spacing=options.spacing,
     )
-    #print("PR", pr)
+    # print("PR", pr)
     fs = coalesce.coalesce(
         pr,
         num_rounds=options.rounds,
         spacing=options.spacing,
     )
-    #print(fs)
+    # print(fs)
     final = permute.permute_zones(fs)
-    #print(final)
+    # print(final)
     for match in final:
         print("|".join(str(x) for x in match))
