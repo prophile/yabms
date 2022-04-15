@@ -69,4 +69,4 @@ def main(args=sys.argv[1:]):
     final = permute.permute_zones(fs)
     # print(final)
     for match in final:
-        print("|".join(str(x) for x in match))
+        print("|".join(str(x + 1) for x in match))
