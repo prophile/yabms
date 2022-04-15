@@ -22,6 +22,29 @@ def argument_parser():
     parser.add_argument(
         "-V", "--version", action="version", version=f"%(prog)s {get_version()}"
     )
+    parser.add_argument(
+        "-n", "--num-teams", type=int, default=8, help="number of teams to schedule"
+    )
+    parser.add_argument(
+        "-r", "--rounds", type=int, default=3, help="number of rounds to schedule"
+    )
+    parser.add_argument(
+        "-a",
+        "--appearances",
+        type=int,
+        default=1,
+        help="number of appearances per team",
+    )
+    parser.add_argument(
+        "-z", "--zones", type=int, default=4, help="number of zones per match"
+    )
+    parser.add_argument(
+        "-s",
+        "--spacing",
+        type=int,
+        default=1,
+        help="number of gaps for any given team between matches",
+    )
     return parser
 
 
