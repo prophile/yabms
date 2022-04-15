@@ -1,0 +1,32 @@
+[project]
+name = "yabms"
+version = "0.1.1"
+description="Yet Another Bloody Match Scheduler"
+authors = [
+    { name="Alistair Lynn", email="alynn@studentrobotics.org" },
+    # "Alistair Lynn <alynn@studentrobotics.org>"
+]
+readme = "README.md"
+
+classifiers = [
+    "Development Status :: 2 - Pre-Alpha",
+    "Environment :: Console",
+    "License :: CC0 1.0 Universal (CC0 1.0) Public Domain Dedication",
+    "Programming Language :: Python :: 3"
+]
+
+[dependencies]
+z3-solver = "^4.8"
+
+[tool.isort]
+profile = "black"
+src_paths = ["yabms"]
+
+[build-system]
+requires = [
+    "setuptools >=62"
+]
+build-backend = "setuptools.build_meta"
+
+[tool.black]
+target_version = ['py310']

@@ -1,0 +1,4 @@
+#!/bin/bash
+set -eo pipefail
+black --check yabms
+exec flake8 yabms
