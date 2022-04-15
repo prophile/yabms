@@ -5,6 +5,8 @@ import sys
 
 import pkg_resources
 
+from . import coalesce, protoround
+
 
 def get_version():
     """
@@ -51,5 +53,16 @@ def argument_parser():
 def main(args=sys.argv[1:]):
     """Run as main entry point."""
     options = argument_parser().parse_args(args)
-    print(options)
-    print(f"{get_version()}")
+    pr = protoround.build_proto_round(
+        num_teams=options.num_teams,
+        appearances_per_round=options.appearances,
+        num_zones=options.zones,
+        spacing=options.spacing,
+    )
+    print("PR", pr)
+    fs = coalesce.coalesce(
+        pr,
+        num_rounds=options.rounds,
+        spacing=options.spacing,
+    )
+    print(fs)
