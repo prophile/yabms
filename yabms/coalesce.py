@@ -7,6 +7,7 @@ proto-rounds together to build a single schedule.
 
 import itertools
 import sys
+import random
 
 import tqdm
 import z3
@@ -92,43 +93,32 @@ def _add_round(proto_round, confirmed, *, spacing=1):
             for right_team in true_match[ix + 1 :]:
                 existing_facings[left_team, right_team] += 1
 
-    def facing_index(left_true_team, right_true_team):
-        # We encode this as a single integer
-        return (num_teams + 1) * left_true_team + right_true_team
+    facings_in_order = sorted(
+        existing_facings.keys(),
+        key=lambda x: (existing_facings[x], random.random()),
+    )
 
-    existing_facings_indexed = {
-        facing_index(left_team, right_team): value
-        for (left_team, right_team), value in existing_facings.items()
-    }
+    def ensure_facing(a, b):
+        assert a != b
+        has_facing = []
 
-    pseudo_facings = {
-        (left_team, right_team): 0
-        for ix, left_team in enumerate(teams[:-1])
-        for right_team in teams[ix + 1 :]
-    }
-    for provisional_match in proto_round:
-        for ix, left_pseudo_team in enumerate(provisional_match[:-1]):
-            for right_pseudo_team in provisional_match[ix + 1 :]:
-                pseudo_facings[left_pseudo_team, right_pseudo_team] += 1
+        for match in proto_round:
+            for left_team in match:
+                for right_team in match:
+                    if left_team is right_team:
+                        continue
+                    has_facing.append(
+                        z3.And(
+                            team_assignment[left_team] == a,
+                            team_assignment[right_team] == b,
+                        ),
+                    )
 
-    pseudo_total_facings = {
-        (left_pseudo_team, right_pseudo_team): (
-            pseudo_facings[left_pseudo_team, right_pseudo_team]
-            + _z3_lookup(
-                existing_facings_indexed,
-                facing_index(
-                    team_assignment[left_pseudo_team],
-                    team_assignment[right_pseudo_team],
-                ),
-            )
-        )
-        for ix, left_pseudo_team in enumerate(teams[:-1])
-        for right_pseudo_team in teams[ix + 1 :]
-    }
+        solver.add(z3.Or(*has_facing))
 
-    for pseudo_a, pseudo_b in itertools.combinations(pseudo_total_facings.values(), 2):
-        abs_difference = z3.Abs(pseudo_a - pseudo_b)
-        solver.add(abs_difference <= 1)
+    # Ensure the bottom 5 percentile get a facing in this round.
+    for a, b in facings_in_order[: 3 * len(facings_in_order) // 100]:
+        ensure_facing(a, b)
 
     result = solver.check()
 
