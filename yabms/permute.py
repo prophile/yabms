@@ -68,7 +68,10 @@ def permute_zones(schedule):
                 ),
             )
             if match != list(best_permutation):
-                # print(f"Altered match {ix} from {match} to {best_permutation}")
+                # print(
+                #     f"Altered match {ix} from {match} to {best_permutation}",
+                #     file=sys.stderr,
+                # )
                 made_changes = True
                 schedule[ix] = list(best_permutation)
 
