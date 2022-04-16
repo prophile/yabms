@@ -10,5 +10,6 @@ def register_all_validators():
         validator_numeric,
         validator_rerun,
         validator_size,
+        validator_spacing,
         validator_zone_distribution,
     )
