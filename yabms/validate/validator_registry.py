@@ -6,6 +6,7 @@ def register_all_validators():
     from . import (  # noqa: F401
         validator_dupes,
         validator_equal_appearances,
+        validator_facing,
         validator_rerun,
         validator_size,
         validator_zone_distribution,
