@@ -10,4 +10,6 @@ def validate_size(schedule):
 
     for ix, match in enumerate(schedule):
         if len(match) != num_teams:
-            yield error(f"Match {ix} has {len(match)} teams, expected {num_teams}")
+            yield error(
+                "wrong-size", f"Match {ix} has {len(match)} teams, expected {num_teams}"
+            )

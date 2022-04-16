@@ -32,24 +32,24 @@ def validator(name, *, after=None):
     return decorator
 
 
-def error(message):
+def error(code, message):
     """
     Produce an error in a validator to be emitted.
 
     Usage:
     >>> yield error("No teams in zone 1")
     """
-    return "error", message
+    return "error", code, message
 
 
-def warning(message):
+def warning(code, message):
     """
     Produce a warning in a validator to be emitted.
 
     Usage:
     >>> yield warning("Team 5 has fewer matches than team 6")
     """
-    return "warning", message
+    return "warning", code, message
 
 
 def _run_validator(validator, schedule, warnings, errors):
@@ -57,11 +57,11 @@ def _run_validator(validator, schedule, warnings, errors):
     generator = validator(schedule)
     try:
         while True:
-            level, message = next(generator)
+            level, code, message = next(generator)
             if level == "error":
-                errors.append(message)
+                errors.append((code, message))
             elif level == "warning":
-                warnings.append(message)
+                warnings.append((code, message))
             else:
                 raise ValueError(f"Unknown level {level!r}")
     except StopIteration as e:

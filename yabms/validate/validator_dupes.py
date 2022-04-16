@@ -13,4 +13,6 @@ def validate_dupes(schedule):
         duplicate_teams = [team for team, count in appearances.items() if count > 1]
         duplicate_teams.sort()
         for team in duplicate_teams:
-            yield error(f"Team {team} appears in match {ix} {appearances[team]} times")
+            yield error(
+                "dupe", f"Team {team} appears in match {ix} {appearances[team]} times"
+            )

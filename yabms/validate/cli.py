@@ -45,10 +45,10 @@ def main(args=sys.argv[1:]):
 
     warnings, errors = validators.run_validators(matches)
 
-    for warning in warnings:
-        print(f"W: {warning}")
-    for error in errors:
-        print(f"E: {error}")
+    for code, warning in warnings:
+        print(f"W {code}: {warning}")
+    for code, error in errors:
+        print(f"E {code}: {error}")
 
     print(f"{len(warnings)} warnings, {len(errors)} errors")
 
