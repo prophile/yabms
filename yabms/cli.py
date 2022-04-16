@@ -47,6 +47,12 @@ def argument_parser():
         default=1,
         help="number of gaps for any given team between matches",
     )
+    parser.add_argument(
+        "--no-balance",
+        action="store_false",
+        dest="balance",
+        help="do not balance the teams",
+    )
     return parser
 
 
@@ -66,7 +72,10 @@ def main(args=sys.argv[1:]):
         spacing=options.spacing,
     )
     # print(fs)
-    final = permute.permute_zones(fs)
+    if options.balance:
+        final = permute.permute_zones(fs)
+    else:
+        final = fs
     # print(final)
     for match in final:
         print("|".join(str(x + 1) for x in match))
