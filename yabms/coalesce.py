@@ -23,6 +23,11 @@ def _is_valid(provisional, *, spacing=1):
         if len(teams) != zone_count * (spacing + 1):
             return False
 
+    # Check the exact duplicate constraint
+    match_combinations = {tuple(sorted(match)) for match in provisional}
+    if len(match_combinations) != len(provisional):
+        return False
+
     # Check the max-facing constraint
     facings = {
         (x, y): 0 for n, x in enumerate(all_teams[:-1]) for y in all_teams[n + 1 :]
@@ -41,29 +46,34 @@ def _is_valid(provisional, *, spacing=1):
     return True
 
 
+def _add_round(proto_round, confirmed, *, spacing=1):
+    num_teams = len({y for x in proto_round for y in x})
+    teams = list(range(num_teams))
+
+    # For each round, we need to select a team assignment of
+    # the proto-round which preserves the spacing window.
+    for _ in range(1_000_000):
+        random.shuffle(teams)
+
+        provisional = list(confirmed)  # Copy the confirmed list
+        this_round = [[teams[n] for n in match] for match in proto_round]
+        provisional += this_round
+        if _is_valid(provisional):
+            return provisional
+    else:
+        raise ValueError("Could not find a valid schedule.")
+
+
 def coalesce(proto_round, num_rounds, *, spacing=1):
     """Coalesce a proto-round sequence into a schedule."""
     # For each round, we need to select a team assignment of
     # the proto-round which preserves the spacing window.
     confirmed = proto_round
 
-    num_teams = len({y for x in proto_round for y in x})
-    teams = list(range(num_teams))
-
     print("Coalescing proto-rounds into full schedule...", file=sys.stderr)
-    for round_number in tqdm.trange(1, num_rounds):
+    for _ in tqdm.trange(1, num_rounds):
         # For each round, we need to select a team assignment of
         # the proto-round which preserves the spacing window.
-        for _ in range(1_000_000):
-            random.shuffle(teams)
-
-            provisional = list(confirmed)  # Copy the confirmed list
-            this_round = [[teams[n] for n in match] for match in proto_round]
-            provisional += this_round
-            if _is_valid(provisional):
-                confirmed = provisional
-                break
-        else:
-            raise ValueError("Could not find a valid schedule.")
+        confirmed = _add_round(proto_round, confirmed, spacing=spacing)
 
     return confirmed
