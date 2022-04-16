@@ -5,10 +5,36 @@ Having built a valid proto-round, we can coalesce multiple
 proto-rounds together to build a single schedule.
 """
 
+import itertools
 import sys
 
 import tqdm
 import z3
+
+
+def _z3_lookup(table, key, default=None):
+    """Build an ITE chain for Z3 to look up a value in a dict."""
+    # If we have no default, choose one item from the table arbitrarily.
+    table = dict(table)
+
+    if isinstance(key, int):
+        # ????
+        # raise AssertionError
+        return table.get(key, default)
+
+    if default is None:
+        try:
+            _, default = table.popitem()
+        except KeyError:
+            raise ValueError("No default value provided and no table items")
+
+    expression = default
+
+    while table:
+        this_key, this_value = table.popitem()
+        expression = z3.If(key == this_key, this_value, expression)
+
+    return z3.simplify(expression)
 
 
 def _add_round(proto_round, confirmed, *, spacing=1):
@@ -53,7 +79,56 @@ def _add_round(proto_round, confirmed, *, spacing=1):
             exact_match = z3.And(*match_terms)
             solver.add(z3.Not(exact_match))
 
-    # TODO: 5: Facing constraints.
+    # 5: Facing constraints. The maximum distance between the facing count of any
+    # two teams is 3.
+    existing_facings = {
+        (left_team, right_team): 0
+        for ix, left_team in enumerate(teams[:-1])
+        for right_team in teams[ix + 1 :]
+    }
+    for true_match in confirmed:
+        true_match = sorted(true_match)
+        for ix, left_team in enumerate(true_match[:-1]):
+            for right_team in true_match[ix + 1 :]:
+                existing_facings[left_team, right_team] += 1
+
+    def facing_index(left_true_team, right_true_team):
+        # We encode this as a single integer
+        return (num_teams + 1) * left_true_team + right_true_team
+
+    existing_facings_indexed = {
+        facing_index(left_team, right_team): value
+        for (left_team, right_team), value in existing_facings.items()
+    }
+
+    pseudo_facings = {
+        (left_team, right_team): 0
+        for ix, left_team in enumerate(teams[:-1])
+        for right_team in teams[ix + 1 :]
+    }
+    for provisional_match in proto_round:
+        for ix, left_pseudo_team in enumerate(provisional_match[:-1]):
+            for right_pseudo_team in provisional_match[ix + 1 :]:
+                pseudo_facings[left_pseudo_team, right_pseudo_team] += 1
+
+    pseudo_total_facings = {
+        (left_pseudo_team, right_pseudo_team): (
+            pseudo_facings[left_pseudo_team, right_pseudo_team]
+            + _z3_lookup(
+                existing_facings_indexed,
+                facing_index(
+                    team_assignment[left_pseudo_team],
+                    team_assignment[right_pseudo_team],
+                ),
+            )
+        )
+        for ix, left_pseudo_team in enumerate(teams[:-1])
+        for right_pseudo_team in teams[ix + 1 :]
+    }
+
+    for pseudo_a, pseudo_b in itertools.combinations(pseudo_total_facings.values(), 2):
+        abs_difference = z3.Abs(pseudo_a - pseudo_b)
+        solver.add(abs_difference <= 1)
 
     result = solver.check()
 
