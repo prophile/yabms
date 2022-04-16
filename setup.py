@@ -21,10 +21,12 @@ setup(
     ],
     install_requires=[
         "z3-solver",
+        "tqdm",
     ],
     entry_points={
         "console_scripts": [
             "yabms = yabms.cli:main",
+            "yabms-validate = yabms.validate.cli:main",
         ],
     },
 )
