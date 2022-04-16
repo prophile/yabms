@@ -74,7 +74,7 @@ def permute_zones(schedule):
 
         if not made_changes:
             # Do an annealing step.
-            temperature = 1 - n / num_iterations
+            temperature = (1 - n / num_iterations) ** 2
             for match in schedule:
                 if random.random() < temperature:
                     random.shuffle(match)
