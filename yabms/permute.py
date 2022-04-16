@@ -5,6 +5,8 @@ import random
 import statistics
 import sys
 
+import tqdm
+
 
 def permute_zones(schedule):
     """Permute the zones in a schedule for balance."""
@@ -17,7 +19,7 @@ def permute_zones(schedule):
 
     match_numbers = list(range(len(schedule)))
 
-    for n in range(1_000_000):
+    for _ in tqdm.trange(1_000_000):
         appearance_counts = collections.Counter(
             (team, zone_number)
             for match in schedule
@@ -45,9 +47,5 @@ def permute_zones(schedule):
             if schedule[match_number][highest_zone] == highest_team:
                 random.shuffle(schedule[match_number])
                 break
-
-        if n and n % 10_000 == 0:
-            # print(f"{n} iterations, {highest_count} to {lowest_count}, score={score:.3f}", file=sys.stderr)
-            pass
 
     return best_schedule
