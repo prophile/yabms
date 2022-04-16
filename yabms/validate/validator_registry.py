@@ -7,6 +7,7 @@ def register_all_validators():
         validator_dupes,
         validator_equal_appearances,
         validator_facing,
+        validator_numeric,
         validator_rerun,
         validator_size,
         validator_zone_distribution,
