@@ -25,10 +25,10 @@ def argument_parser():
         "-V", "--version", action="version", version=f"%(prog)s {get_version()}"
     )
     parser.add_argument(
-        "-n", "--num-teams", type=int, default=8, help="number of teams to schedule"
+        "-n", "--num-teams", type=int, default=16, help="number of teams to schedule"
     )
     parser.add_argument(
-        "-r", "--rounds", type=int, default=3, help="number of rounds to schedule"
+        "-r", "--rounds", type=int, default=8, help="number of rounds to schedule"
     )
     parser.add_argument(
         "-a",
