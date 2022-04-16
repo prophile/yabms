@@ -45,7 +45,6 @@ def coalesce(proto_round, num_rounds, *, spacing=1):
     """Coalesce a proto-round sequence into a schedule."""
     # For each round, we need to select a team assignment of
     # the proto-round which preserves the spacing window.
-    # TODO: Implement the max-facing constraint here too.
     confirmed = proto_round
 
     num_teams = len({y for x in proto_round for y in x})
