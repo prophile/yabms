@@ -22,8 +22,9 @@ def _badness(schedule):
         for match in schedule
         for zone_number, team in enumerate(match)
     )
-    if min(appearance_counts.values()) == max(appearance_counts.values()):
-        return 0
+
+    best_possible_entropy = math.log(sum(appearance_counts.values()))
+
     # We want to maximise the entropy of the distribution.
     #
     # The entropy is -Σ p log(p) where p is the number of team/zone appearances
@@ -34,9 +35,11 @@ def _badness(schedule):
     entropy = _entropy(appearance_counts)
 
     # Since we're measuring badness though, which needs to be minimised, we
-    # invert the entropy. Inversion is preferable to negation here since it
-    # preserves the above condition of badness = 0 meaning perfect balance.
-    return 1.0 / entropy
+    # subtract the entropy from the theoretical maximum (so that if the
+    # maximum is reached, the badness is 0). In this way, the 'badness
+    # score' is essentially the number of nats to go until reaching the
+    # exact entropy of a uniform distribution.
+    return best_possible_entropy - entropy
 
 
 def permute_zones(schedule):
@@ -54,7 +57,7 @@ def permute_zones(schedule):
         score = _badness(schedule)
         # print(f"Iteration {n}: {score}", file=sys.stderr)
 
-        if score == 0:
+        if score < 1e-6:
             break
 
         for ix, match in enumerate(schedule):
