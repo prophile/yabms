@@ -46,7 +46,9 @@ def permute_zones(schedule):
 
     print("Balancing zones...", file=sys.stderr)
 
-    for n in tqdm.trange(100):
+    num_iterations = 1_000
+
+    for n in tqdm.trange(num_iterations):
         made_changes = False
 
         score = _badness(schedule)
@@ -69,8 +71,9 @@ def permute_zones(schedule):
 
         if not made_changes:
             # Do an annealing step.
+            temperature = 1 - n / num_iterations
             for match in schedule:
-                if random.random() < 0.05:
+                if random.random() < temperature:
                     random.shuffle(match)
 
     return schedule
