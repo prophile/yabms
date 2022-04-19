@@ -5,8 +5,10 @@ Having built a valid proto-round, we can coalesce multiple
 proto-rounds together to build a single schedule.
 """
 
+import itertools
 import sys
 
+import tqdm
 import z3
 
 
@@ -51,19 +53,24 @@ def coalesce(proto_round, num_rounds, *, spacing=1):
     }
 
     # 1: Enforce range constraints
+    print("  Adding range constraints... ", file=sys.stderr, end="")
     for allocation in team_to_pseudo_team.values():
         solver.add(allocation >= min_team)
         solver.add(allocation <= max_team)
+    print(f"done, {len(solver.assertions())} constraints", file=sys.stderr)
 
     # 2: Enforce round bijection: each allocation is different in each round
+    print("  Adding round bijection constraints... ", file=sys.stderr, end="")
     for round_num in range(num_rounds):
         solver.add(
             z3.Distinct(
                 *[team_to_pseudo_team[team_num, round_num] for team_num in teams]
             )
         )
+    print(f"done, {len(solver.assertions())} constraints", file=sys.stderr)
 
     # 3: Enforce different allocation in each round
+    print("  Adding round disjointness constraints... ", file=sys.stderr, end="")
     for team_num in teams:
         solver.add(
             z3.Distinct(
@@ -73,8 +80,10 @@ def coalesce(proto_round, num_rounds, *, spacing=1):
                 ]
             )
         )
+    print(f"done, {len(solver.assertions())} constraints", file=sys.stderr)
 
     # 4: Enforce spacing constraints
+    print("  Adding spacing constraints... ", file=sys.stderr, end="")
     for spacing_number in range(spacing):
         end_window_teams = [
             team_number
@@ -105,45 +114,75 @@ def coalesce(proto_round, num_rounds, *, spacing=1):
                                 )
                             )
                         )
+    print(f"done, {len(solver.assertions())} constraints", file=sys.stderr)
 
-    # 5: Enforce facing constraints
-    optimal_facings = _total_facings_per_team_pair(
-        match_size=len(proto_round[0]),
-        num_matches=len(proto_round) * num_rounds,
-        num_teams=len(teams),
-    )
-    min_facings = optimal_facings - 2
-    max_facings = optimal_facings + 3
-    if min_facings < 0:
-        min_facings = 0
-    facing_vars = []
-    print(
-        f"Facing bounds: at least {min_facings}, at most {max_facings}", file=sys.stderr
-    )
-    for ix, left_team in enumerate(teams):
-        for right_team in teams[ix + 1 :]:
-            # How many times do they face?
-            facing_count = z3.Int(f"facing_{left_team}_{right_team}")
-            facings = 0
-            for round_num in range(num_rounds):
-                for match in proto_round:
-                    for left_zone in match:
-                        for right_zone in match:
-                            if left_zone == right_zone:
-                                continue
-                            is_facing = z3.And(
-                                team_to_pseudo_team[left_team, round_num] == left_zone,
-                                team_to_pseudo_team[right_team, round_num]
-                                == right_zone,
-                            )
-                            facings += z3.If(is_facing, 1, 0)
-            solver.add(facing_count == z3.simplify(facings))
-            solver.add(facing_count >= min_facings)
-            solver.add(facing_count <= max_facings)
-            facing_vars.append(facing_count)
+    forbid_team_overlap = max(len(proto_round[0]) - 1, 2)
 
-    # 6: Enforce match uniqueness constraints
-    # TODO: How?
+    # 5: Enforce match overlap constraints
+    print("  Adding match overlap constraints... ", file=sys.stderr, end="")
+    zone_indices = list(range(len(proto_round[0])))
+    round_num_pairs = []
+    for earlier_round_num in range(num_rounds - 1):
+        for later_round_num in range(earlier_round_num + 1, num_rounds):
+            round_num_pairs.append((earlier_round_num, later_round_num))
+
+    match_pairs = []
+    for earlier_match in proto_round:
+        for later_match in proto_round:
+            match_pairs.append((earlier_match, later_match))
+
+    round_and_match_quads = [
+        (earlier_round_num, earlier_match, later_round_num, later_match)
+        for earlier_round_num, later_round_num in round_num_pairs
+        for earlier_match, later_match in match_pairs
+    ]
+
+    team_combinations = list(itertools.combinations(teams, forbid_team_overlap))
+    zone_permutations = list(itertools.permutations(zone_indices, forbid_team_overlap))
+
+    for (
+        (
+            earlier_round_num,
+            earlier_match,
+            later_round_num,
+            later_match,
+        ),
+        real_team_mix,
+        early_zones,
+        late_zones,
+    ) in tqdm.tqdm(
+        itertools.product(
+            round_and_match_quads,
+            team_combinations,
+            zone_permutations,
+            zone_permutations,
+        ),
+        total=len(round_and_match_quads)
+        * len(team_combinations)
+        * len(zone_permutations)
+        * len(zone_permutations),
+    ):
+        assigned_early = z3.And(
+            *[
+                team_to_pseudo_team[team_number, earlier_round_num]
+                == earlier_match[zone_index]
+                for team_number, zone_index in zip(real_team_mix, early_zones)
+            ]
+        )
+        assigned_late = z3.And(
+            *[
+                team_to_pseudo_team[team_number, later_round_num]
+                == later_match[zone_index]
+                for team_number, zone_index in zip(real_team_mix, late_zones)
+            ]
+        )
+        solver.add(
+            z3.Implies(
+                assigned_early,
+                z3.Not(assigned_late),
+            )
+        )
+    print(f"done, {len(solver.assertions())} constraints", file=sys.stderr)
 
     # Solve.
     print("Running solver...", file=sys.stderr)
