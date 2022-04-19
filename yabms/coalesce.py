@@ -112,8 +112,8 @@ def coalesce(proto_round, num_rounds, *, spacing=1):
         num_matches=len(proto_round) * num_rounds,
         num_teams=len(teams),
     )
-    min_facings = optimal_facings - 1
-    max_facings = optimal_facings + 2
+    min_facings = optimal_facings - 2
+    max_facings = optimal_facings + 3
     if min_facings < 0:
         min_facings = 0
     facing_vars = []
