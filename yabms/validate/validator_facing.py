@@ -5,7 +5,6 @@ import itertools
 from .validator_equal_appearances import validate_equal_appearances
 from .validators import error, validator, warning
 
-
 FACING_WARNING_THRESHOLD = 3
 FACING_ERROR_THRESHOLD = 4
 
@@ -28,9 +27,7 @@ def validate_facing(schedule):
     most_facings = max(facings.values())
 
     example_most_facings_pair_a, example_most_facings_pair_b = next(
-        facing
-        for facing, count in facings.items()
-        if count == most_facings
+        facing for facing, count in facings.items() if count == most_facings
     )
 
     for (left_team, right_team), facings_between in facings.items():
