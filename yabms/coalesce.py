@@ -52,6 +52,31 @@ def coalesce(proto_round, num_rounds, *, spacing=1):
         for round_num in range(num_rounds)
     }
 
+    print("  Adding in-match variables... ", file=sys.stderr, end="")
+    in_match = {
+        (round_num, team_num, match_num): z3.Bool(
+            f"in_match_{round_num}_{team_num}_{match_num}"
+        )
+        for round_num in range(num_rounds)
+        for team_num in teams
+        for match_num in range(len(proto_round))
+    }
+    for round_num in range(num_rounds):
+        for team_num in teams:
+            for match_num, pseudo_teams in enumerate(proto_round):
+                # Equality
+                solver.add(
+                    z3.Or(
+                        *[
+                            team_to_pseudo_team[team_num, round_num] == pseudo_team
+                            for pseudo_team in pseudo_teams
+                        ],
+                    )
+                    == in_match[round_num, team_num, match_num]
+                )
+
+    print(f"done, {len(solver.assertions())} constraints", file=sys.stderr)
+
     # 1: Enforce range constraints
     print("  Adding range constraints... ", file=sys.stderr, end="")
     for allocation in team_to_pseudo_team.values():
@@ -83,64 +108,38 @@ def coalesce(proto_round, num_rounds, *, spacing=1):
     print(f"done, {len(solver.assertions())} constraints", file=sys.stderr)
 
     # 4: Enforce spacing constraints
-    print("  Adding spacing constraints... ", file=sys.stderr, end="")
-    for spacing_number in range(spacing):
-        end_window_teams = [
-            team_number
-            for match in proto_round[-spacing_number - 1 :]
-            for team_number in match
-        ]
-        start_window_teams = [
-            team_number
-            for match in proto_round[: spacing - spacing_number]
-            for team_number in match
-        ]
+    print("  Adding spacing constraints...", file=sys.stderr)
+    for earlier_round_number, early_offset, team_num in tqdm.tqdm(
+        itertools.product(
+            range(num_rounds - 1),
+            range(spacing),
+            teams,
+        ),
+        total=(num_rounds - 1) * spacing * len(teams),
+    ):
+        later_round_number = earlier_round_number + 1
+        for late_offset in range(spacing):
+            # If the team is in the (early_offset) match from the end of the
+            # earlier round, it cannot be in the (late_offset) match from the
+            # start of the later round.
+            solver.add(
+                z3.Not(
+                    z3.And(
+                        in_match[
+                            earlier_round_number,
+                            team_num,
+                            len(proto_round) - early_offset - 1,
+                        ],
+                        in_match[later_round_number, team_num, late_offset],
+                    )
+                )
+            )
 
-        for earlier_round_number in range(num_rounds - 1):
-            later_round_number = earlier_round_number + 1
-
-            for end_window_pseudo_team in end_window_teams:
-                for start_window_pseudo_team in start_window_teams:
-                    for team_number in teams:
-                        solver.add(
-                            z3.Not(
-                                z3.And(
-                                    team_to_pseudo_team[
-                                        team_number, earlier_round_number
-                                    ]
-                                    == end_window_pseudo_team,
-                                    team_to_pseudo_team[team_number, later_round_number]
-                                    == start_window_pseudo_team,
-                                )
-                            )
-                        )
-    print(f"done, {len(solver.assertions())} constraints", file=sys.stderr)
+    print(f"     ...done, {len(solver.assertions())} constraints", file=sys.stderr)
 
     forbid_team_overlap = max(len(proto_round[0]) - 1, 2)
 
     # 5: Enforce match overlap constraints
-    print("  Adding in-match variables... ", file=sys.stderr, end="")
-    in_match = {
-        (round_num, team_num, match_num): z3.Bool(f"in_match_{round_num}_{team_num}_{match_num}")
-        for round_num in range(num_rounds)
-        for team_num in teams
-        for match_num in range(len(proto_round))
-    }
-    for round_num in range(num_rounds):
-        for team_num in teams:
-            for match_num, pseudo_teams in enumerate(proto_round):
-                # Equality
-                solver.add(
-                    z3.Or(
-                        *[
-                            team_to_pseudo_team[team_num, round_num] == pseudo_team
-                            for pseudo_team in pseudo_teams
-                        ],
-                    ) == in_match[round_num, team_num, match_num]
-                )
-
-    print(f"done, {len(solver.assertions())} constraints", file=sys.stderr)
-
     print("  Adding match overlap constraints...", file=sys.stderr)
     match_pairings = [
         (
@@ -155,23 +154,36 @@ def coalesce(proto_round, num_rounds, *, spacing=1):
         for later_match_num in range(len(proto_round))
     ]
     team_groups = list(itertools.combinations(teams, forbid_team_overlap))
-    for (earlier_round_num, earlier_match_num, later_round_num, later_match_num), team_group in tqdm.tqdm(
+    for (
+        earlier_round_num,
+        earlier_match_num,
+        later_round_num,
+        later_match_num,
+    ), team_group in tqdm.tqdm(
         itertools.product(match_pairings, team_groups),
         total=len(match_pairings) * len(team_groups),
     ):
-        all_in_early_match = z3.And(*[
-            in_match[earlier_round_num, team_num, earlier_match_num]
-            for team_num in team_group
-        ])
-        all_in_later_match = z3.And(*[
-            in_match[later_round_num, team_num, later_match_num]
-            for team_num in team_group
-        ])
-        solver.add(z3.Not(z3.And(
-            all_in_early_match,
-            all_in_later_match,
-        )))
-    print(f"  ...done, {len(solver.assertions())} constraints", file=sys.stderr)
+        all_in_early_match = z3.And(
+            *[
+                in_match[earlier_round_num, team_num, earlier_match_num]
+                for team_num in team_group
+            ]
+        )
+        all_in_later_match = z3.And(
+            *[
+                in_match[later_round_num, team_num, later_match_num]
+                for team_num in team_group
+            ]
+        )
+        solver.add(
+            z3.Not(
+                z3.And(
+                    all_in_early_match,
+                    all_in_later_match,
+                )
+            )
+        )
+    print(f"     ...done, {len(solver.assertions())} constraints", file=sys.stderr)
 
     # Solve.
     print("Running solver...", file=sys.stderr)
