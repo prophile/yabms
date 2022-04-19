@@ -5,151 +5,152 @@ Having built a valid proto-round, we can coalesce multiple
 proto-rounds together to build a single schedule.
 """
 
-import itertools
 import sys
-import random
 
-import tqdm
 import z3
 
+def _possible_facings_per_match(match_size):
+    # 2 zones: 1 facing
+    # 3 zones: 3 facings
+    # 4 zones: 6 facings
+    # 5 zones: 10 facings
+    return match_size * (match_size - 1) // 2
 
-def _z3_lookup(table, key, default=None):
-    """Build an ITE chain for Z3 to look up a value in a dict."""
-    # If we have no default, choose one item from the table arbitrarily.
-    table = dict(table)
+def _total_facings(match_size, num_matches):
+    return _possible_facings_per_match(match_size) * num_matches
 
-    if isinstance(key, int):
-        # ????
-        # raise AssertionError
-        return table.get(key, default)
-
-    if default is None:
-        try:
-            _, default = table.popitem()
-        except KeyError:
-            raise ValueError("No default value provided and no table items")
-
-    expression = default
-
-    while table:
-        this_key, this_value = table.popitem()
-        expression = z3.If(key == this_key, this_value, expression)
-
-    return z3.simplify(expression)
-
-
-def _add_round(proto_round, confirmed, *, spacing=1):
-    num_teams = len({y for x in proto_round for y in x})
-    teams = list(range(num_teams))
-
-    solver = z3.Solver()
-
-    team_assignment = {team: z3.Int(f"team-{team}") for team in teams}
-
-    # 1: Range constraints. Each assignment must be a team number.
-    for assignment in team_assignment.values():
-        solver.add(assignment >= min(teams))
-        solver.add(assignment <= max(teams))
-
-    # 2: Bijection constraints. Each team must appear exactly once.
-    values = list(team_assignment.values())
-    for ix, left_assignment in enumerate(values[:-1]):
-        for right_assignment in values[ix + 1 :]:
-            solver.add(left_assignment != right_assignment)
-    del values
-
-    # 3: Spacing constraints. Teams must have at least the spacing gap
-    # between appearances. We need only implement this for the first
-    # few matches, as the spacing within the proto-round is already
-    # enforced.
-    for ix, match in enumerate(proto_round[:spacing]):
-        conflicting_teams = {
-            team for true_match in confirmed[-spacing + ix :] for team in true_match
-        }
-        for pseudo_team in match:
-            for conflicting_team in conflicting_teams:
-                solver.add(team_assignment[pseudo_team] != conflicting_team)
-
-    # 4: Duplication constraints. The assignment cannot produce any fully
-    # duplicated matches.
-    for true_match in confirmed:
-        for provisional_match in proto_round:
-            match_terms = []
-            for true_team, pseudo_team in zip(true_match, provisional_match):
-                match_terms.append(team_assignment[pseudo_team] == true_team)
-            exact_match = z3.And(*match_terms)
-            solver.add(z3.Not(exact_match))
-
-    # 5: Facing constraints. The maximum distance between the facing count of any
-    # two teams is 3.
-    existing_facings = {
-        (left_team, right_team): 0
-        for ix, left_team in enumerate(teams[:-1])
-        for right_team in teams[ix + 1 :]
-    }
-    for true_match in confirmed:
-        true_match = sorted(true_match)
-        for ix, left_team in enumerate(true_match[:-1]):
-            for right_team in true_match[ix + 1 :]:
-                existing_facings[left_team, right_team] += 1
-
-    facings_in_order = sorted(
-        existing_facings.keys(),
-        key=lambda x: (existing_facings[x], random.random()),
-    )
-
-    def ensure_facing(a, b):
-        assert a != b
-        has_facing = []
-
-        for match in proto_round:
-            for left_team in match:
-                for right_team in match:
-                    if left_team is right_team:
-                        continue
-                    has_facing.append(
-                        z3.And(
-                            team_assignment[left_team] == a,
-                            team_assignment[right_team] == b,
-                        ),
-                    )
-
-        solver.add(z3.Or(*has_facing))
-
-    # Ensure the bottom 5 percentile get a facing in this round.
-    for a, b in facings_in_order[: 3 * len(facings_in_order) // 100]:
-        ensure_facing(a, b)
-
-    result = solver.check()
-
-    if result != z3.sat:
-        raise ValueError("Solver failed to find a team assignment.")
-
-    model = solver.model()
-
-    true_team_assignments = {
-        pseudo_team: model[team_assignment[pseudo_team]].as_long()
-        for pseudo_team in team_assignment
-    }
-
-    new_round = [
-        [true_team_assignments[pseudo_team] for pseudo_team in match]
-        for match in proto_round
-    ]
-
-    return confirmed + new_round
-
+def _total_facings_per_team_pair(match_size, num_matches, num_teams):
+    total_facings = _total_facings(match_size, num_matches)
+    total_matchups = num_teams * (num_teams - 1) // 2
+    return total_facings // total_matchups
 
 def coalesce(proto_round, num_rounds, *, spacing=1):
     """Coalesce a proto-round sequence into a schedule."""
-    # For each round, we need to select a team assignment of
-    # the proto-round which preserves the spacing window.
-    confirmed = proto_round
+    print("Coalescing proto-rounds...", file=sys.stderr)
 
-    print("Coalescing proto-rounds into full schedule...", file=sys.stderr)
-    for _ in tqdm.trange(1, num_rounds):
-        # For each round, we need to select a team assignment of
-        # the proto-round which preserves the spacing window.
-        confirmed = _add_round(proto_round, confirmed, spacing=spacing)
+    if num_rounds == 1:
+        # No additional work required
+        return proto_round
 
-    return confirmed
+    teams = sorted({
+        y
+        for x in proto_round
+        for y in x
+    })
+
+    min_team = min(teams)
+    max_team = max(teams)
+
+    solver = z3.Solver()
+
+    # Mapping of (real team, round number) -> pseudo team number
+    team_to_pseudo_team = {
+        (team_num, round_num): z3.Int(f"team_{team_num}_round_{round_num}")
+        for team_num in teams
+        for round_num in range(num_rounds)
+    }
+
+    # 1: Enforce range constraints
+    for allocation in team_to_pseudo_team.values():
+        solver.add(allocation >= min_team)
+        solver.add(allocation <= max_team)
+
+    # 2: Enforce round bijection: each allocation is different in each round
+    for round_num in range(num_rounds):
+        solver.add(z3.Distinct(*[
+            team_to_pseudo_team[team_num, round_num]
+            for team_num in teams
+        ]))
+
+    # 3: Enforce different allocation in each round
+    for team_num in teams:
+        solver.add(z3.Distinct(*[
+            team_to_pseudo_team[team_num, round_num]
+            for round_num in range(num_rounds)
+        ]))
+
+    # 4: Enforce spacing constraints
+    for spacing_number in range(spacing):
+        end_window_teams = [
+            team_number
+            for match in proto_round[-spacing_number - 1:]
+            for team_number in match
+        ]
+        start_window_teams = [
+            team_number
+            for match in proto_round[:spacing - spacing_number]
+            for team_number in match
+        ]
+
+        for earlier_round_number in range(num_rounds - 1):
+            later_round_number = earlier_round_number + 1
+
+            for end_window_pseudo_team in end_window_teams:
+                for start_window_pseudo_team in start_window_teams:
+                    for team_number in teams:
+                        solver.add(z3.Not(z3.And(
+                            team_to_pseudo_team[team_number, earlier_round_number] == end_window_pseudo_team,
+                            team_to_pseudo_team[team_number, later_round_number] == start_window_pseudo_team,
+                        )))
+
+    # 5: Enforce facing constraints
+    optimal_facings = _total_facings_per_team_pair(
+        match_size=len(proto_round[0]),
+        num_matches=len(proto_round) * num_rounds,
+        num_teams=len(teams),
+    )
+    min_facings = optimal_facings - 1
+    max_facings = optimal_facings + 2
+    if min_facings < 0:
+        min_facings = 0
+    facing_vars = []
+    print(f"Facing bounds: at least {min_facings}, at most {max_facings}", file=sys.stderr)
+    for ix, left_team in enumerate(teams):
+        for right_team in teams[ix + 1:]:
+            # How many times do they face?
+            facing_count = z3.Int(f"facing_{left_team}_{right_team}")
+            facings = 0
+            for round_num in range(num_rounds):
+                for match in proto_round:
+                    for left_zone in match:
+                        for right_zone in match:
+                            if left_zone == right_zone:
+                                continue
+                            is_facing = z3.And(
+                                team_to_pseudo_team[left_team, round_num] == left_zone,
+                                team_to_pseudo_team[right_team, round_num] == right_zone,
+                            )
+                            facings += z3.If(is_facing, 1, 0)
+            solver.add(facing_count == z3.simplify(facings))
+            solver.add(facing_count >= min_facings)
+            solver.add(facing_count <= max_facings)
+            facing_vars.append(facing_count)
+
+    # 6: Enforce match uniqueness constraints
+    # TODO: How?
+
+    # Solve.
+    print("Running solver...", file=sys.stderr)
+    result = solver.check()
+    if result != z3.sat:
+        raise ValueError("Unable to solve")
+
+    model = solver.model()
+
+    final_schedule = []
+
+    for round_num in range(num_rounds):
+        pseudo_team_to_team = {
+            model.evaluate(team_to_pseudo_team[team_num, round_num]).as_long(): team_num
+            for team_num in teams
+        }
+        for match in proto_round:
+            assigned_match = [
+                pseudo_team_to_team[pseudo_team_num]
+                for pseudo_team_num in match
+            ]
+            final_schedule.append(assigned_match)
+
+    #breakpoint()
+
+    return final_schedule
