@@ -129,27 +129,16 @@ def coalesce(proto_round, num_rounds, *, spacing=1):
     for round_num in range(num_rounds):
         for team_num in teams:
             for match_num, pseudo_teams in enumerate(proto_round):
-                # Positive implication
-                for pseudo_team in pseudo_teams:
-                    solver.add(
-                        z3.Implies(
-                            team_to_pseudo_team[team_num, round_num] == pseudo_team,
-                            in_match[round_num, team_num, match_num],
-                        )
-                    )
-                # Negative implication
+                # Equality
                 solver.add(
-                    z3.Implies(
-                        z3.Or(
-                            *[
-                                team_to_pseudo_team[team_num, round_num]
-                                == pseudo_team
-                                for pseudo_team in pseudo_teams
-                            ]
-                        ),
-                        z3.Not(in_match[round_num, team_num, match_num]),
-                    )
+                    z3.Or(
+                        *[
+                            team_to_pseudo_team[team_num, round_num] == pseudo_team
+                            for pseudo_team in pseudo_teams
+                        ],
+                    ) == in_match[round_num, team_num, match_num]
                 )
+
     print(f"done, {len(solver.assertions())} constraints", file=sys.stderr)
 
     print("  Adding match overlap constraints...", file=sys.stderr)
